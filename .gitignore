@@ -1,0 +1,14 @@
+# Everything here is measured from a personal machine and contains real paths,
+# project names and client names. Never commit it.
+reports/
+.bloat-state.json
+backup-*/
+logs/
+
+# Local-only working notes
+docs/
+/docs
+
+.claude/settings.local.json
+.DS_Store
+node_modules/
