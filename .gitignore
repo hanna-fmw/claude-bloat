@@ -6,9 +6,9 @@ backup-*/
 logs/
 
 # Local-only working notes
-docs/
-/docs
 
 .claude/settings.local.json
 .DS_Store
 node_modules/
+
+backstage/
