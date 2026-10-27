@@ -420,6 +420,27 @@ function fmtDelta(now, before) {
   return `${d > 0 ? '+' : ''}${d}`;
 }
 
+// On a Mac with Hanna's ops shared library (`paths get ops`), alerts go through its one notifier
+// (Slack #system, new and fixed only) and the schedule comes from its jobs register; anywhere
+// else this tool keeps its own dialog and LaunchAgent.
+async function opsDir() {
+  try {
+    const { stdout } = await run('paths', ['get', 'ops']);
+    const d = stdout.trim();
+    return d && existsSync(join(d, 'lib', 'notify.py')) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+async function opsNotify(ops, lines) {
+  await new Promise((done) => {
+    const p = spawn('python3', ['-m', 'lib.notify', 'Claude config bloat'], { cwd: ops, stdio: ['pipe', 'ignore', 'ignore'] });
+    p.on('close', done).on('error', done);
+    p.stdin.end(lines.join('\n'));
+  });
+}
+
 // terminal-notifier has its own bundle identity, so it shows up in System Settings >
 // Notifications and can be granted permission. osascript banners are delivered as
 // "Script Editor" and stay silent if that app has no permission - keep it only as a fallback.
@@ -735,7 +756,9 @@ async function cmdCheck(opts) {
     )
   );
 
-  if (m.alerts.length && !opts.noNotify) {
+  const ops = opts.noNotify ? null : await opsDir();
+  if (ops) await opsNotify(ops, m.alerts);  // an empty list tells it any earlier alert is fixed
+  else if (m.alerts.length && !opts.noNotify) {
     // Always lead with the headline numbers and where they come from, then the alerts.
     const b = startupBreakdown(m);
     const head = [
@@ -811,6 +834,16 @@ async function cmdAdvise(opts) {
 }
 
 async function cmdInstall() {
+  if (await opsDir()) {
+    // Her scheduled jobs are made from one register (ops jobs/launchd.py, entry claude-config-bloat).
+    console.log('Schedule: Mondays 09:00, from ops jobs/launchd.py (entry claude-config-bloat); no LaunchAgent written here.');
+    if (!existsSync(BIN)) {
+      await mkdir(dirname(BIN), { recursive: true });
+      await symlink(SELF, BIN);
+      console.log(`Linked CLI: ${BIN} -> ${SELF}`);
+    }
+    return;
+  }
   // process.execPath resolves to a versioned Cellar path that breaks on the next
   // node upgrade. Prefer a stable symlink if one exists.
   const stableNode = ['/opt/homebrew/bin/node', '/usr/local/bin/node'].find((p) => existsSync(p));
